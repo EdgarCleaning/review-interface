@@ -42,6 +42,7 @@ interface JobHistory {
 }
 
 interface JobEdits {
+  address: string
   work_type: string
   walk: string
 }
@@ -449,7 +450,7 @@ export default function ReviewQueue() {
     // Init edits on first open (preserves edits across collapse/expand)
     setEditsMap(prev => {
       if (prev[job.id]) return prev
-      return { ...prev, [job.id]: { work_type: job.work_type, walk: job.walk ?? '' } }
+      return { ...prev, [job.id]: { address: job.address, work_type: job.work_type, walk: job.walk ?? '' } }
     })
 
     loadHistory(job.id, job.address, job.builder_id)
@@ -479,6 +480,7 @@ export default function ReviewQueue() {
 
     const updates: Record<string, unknown> = { status: 'scheduled', flag_reason: null }
     if (edits) {
+      updates.address   = edits.address
       updates.work_type = edits.work_type
       updates.walk      = edits.walk || null
     }
@@ -505,14 +507,14 @@ export default function ReviewQueue() {
 
     const { error } = await supabase
       .from('jobs')
-      .update({ work_type: edits.work_type, walk: edits.walk || null })
+      .update({ address: edits.address, work_type: edits.work_type, walk: edits.walk || null })
       .eq('id', id)
 
     if (error) {
       setPageError(error.message)
     } else {
       setJobs(prev => prev.map(j =>
-        j.id === id ? { ...j, work_type: edits.work_type, walk: edits.walk || null } : j
+        j.id === id ? { ...j, address: edits.address, work_type: edits.work_type, walk: edits.walk || null } : j
       ))
     }
     setActionLoading(prev => { const s = new Set(prev); s.delete(id); return s })
@@ -593,14 +595,15 @@ export default function ReviewQueue() {
   function isDirty(job: FlaggedJob): boolean {
     const e = editsMap[job.id]
     if (!e) return false
-    return e.work_type !== job.work_type || (e.walk || null) !== job.walk
+    return e.address !== job.address || e.work_type !== job.work_type || (e.walk || null) !== job.walk
   }
 
   function isFieldEdited(job: FlaggedJob, field: keyof JobEdits): boolean {
     const e = editsMap[job.id]
     if (!e) return false
+    if (field === 'address')   return e.address !== job.address
     if (field === 'work_type') return e.work_type !== job.work_type
-    if (field === 'walk') return (e.walk || null) !== job.walk
+    if (field === 'walk')      return (e.walk || null) !== job.walk
     return false
   }
 
@@ -785,10 +788,26 @@ export default function ReviewQueue() {
               <SectionHeader>Extracted Data</SectionHeader>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px 24px' }}>
 
-                {/* Address — always read-only */}
+                {/* Address — editable for flagged jobs */}
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600, marginBottom: 2 }}>Address</div>
-                  <div style={{ fontSize: 13, color: '#1F2937' }}>{job.address}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
+                    <label style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600 }}>Address</label>
+                    {isFlagged && edits && isFieldEdited(job, 'address') && <EditedBadge />}
+                  </div>
+                  {isFlagged && edits ? (
+                    <input
+                      value={edits.address}
+                      onChange={e => updateEdit(job.id, 'address', e.target.value)}
+                      style={{
+                        width: '100%', padding: '7px 10px', borderRadius: 6,
+                        border: '1px solid #D1D5DB', fontSize: 13,
+                        outline: 'none', color: '#1F2937', background: '#fff',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  ) : (
+                    <div style={{ fontSize: 13, color: '#1F2937' }}>{job.address}</div>
+                  )}
                 </div>
 
                 {isFlagged && edits ? (
